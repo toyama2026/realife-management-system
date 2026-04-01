@@ -12,12 +12,12 @@ const supabase = createClient(
 );
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(express.static("public"));
 
-// ヘルスチェック
+// ---- ヘルスチェック ----
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", system: "REALIFE Management System", version: "1.0.0" });
+  res.json({ status: "ok", system: "REALIFE Management System", version: "1.1.0" });
 });
 
 // ---- 案件 (projects) ----
@@ -109,13 +109,11 @@ app.get("/api/suppliers", async (req, res) => {
 
 // ---- ダッシュボード集計 ----
 app.get("/api/dashboard", async (req, res) => {
-  const [projects, estimates, invoices, orders] = await Promise.all([
+  const [projects, estimates, invoices] = await Promise.all([
     supabase.from("projects").select("id, status, estimate_total, gross_profit, gross_margin"),
     supabase.from("estimates").select("id, status"),
     supabase.from("invoices").select("id, status, total_amount"),
-    supabase.from("purchase_orders").select("id, status"),
   ]);
-
   const activeProjects = (projects.data || []).filter(p => p.status === "active");
   const monthSales = (projects.data || []).reduce((s, p) => s + Number(p.estimate_total || 0), 0);
   const draftEstimates = (estimates.data || []).filter(e => e.status === "draft").length;
@@ -124,7 +122,6 @@ app.get("/api/dashboard", async (req, res) => {
   const avgMargin = activeProjects.length
     ? (activeProjects.reduce((s, p) => s + Number(p.gross_margin || 0), 0) / activeProjects.length).toFixed(1)
     : 0;
-
   res.json({
     active_projects: activeProjects.length,
     month_sales: monthSales,
@@ -132,9 +129,16 @@ app.get("/api/dashboard", async (req, res) => {
     unpaid_invoices: unpaidInvoices.length,
     unpaid_amount: unpaidAmount,
     avg_gross_margin: avgMargin,
+    total_projects: (projects.data || []).length,
   });
 });
 
+// ---- PipeDrive連携ルート ----
+app.use("/api/pipedrive", require("./routes/pipedrive"));
+
+// ---- GitHub自動デプロイルート ----
+app.use("/api/github", require("./routes/github_deploy"));
+
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`REALIFE管理システム起動 ポート:${PORT}`);
+  console.log(`REALIFE管理システム v1.1 起動 ポート:${PORT}`);
 });
